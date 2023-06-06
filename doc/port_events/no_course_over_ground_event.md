@@ -1,3 +1,3 @@
-## No Course Over Ground Event
+# No Course Over Ground Event
 
 ![ais heatmap](../../data/images/cog.png)
