@@ -1,8 +1,7 @@
-use rayon::prelude::*;
-use polars::prelude::*;
 use h3o::{LatLng, Resolution};
+use polars::prelude::*;
 use polars_core::utils::accumulate_dataframes_vertical;
-
+use rayon::prelude::*;
 
 // TODO: add generic implementation of lat_lon_to_cell (handle f32 and f64)
 
@@ -28,17 +27,15 @@ fn split_offsets(len: usize, n: usize) -> Vec<(usize, usize)> {
     }
 }
 
-
-// compute h3 index for given lat lon values 
+// compute h3 index for given lat lon values
 fn lat_lon_to_cell(lat: f64, lon: f64, resolution: u8) -> u64 {
     let res = Resolution::try_from(resolution).expect("resolution");
     let coord = LatLng::new(lat, lon).expect("valid coord");
-    
+
     let cell = coord.to_cell(res);
 
-    return u64::from(cell)
+    u64::from(cell)
 }
-
 
 fn apply_h3_cell(lat: &Series, lon: &Series, resolution: u8) -> UInt64Chunked {
     match (lat.dtype(), lon.dtype()) {
@@ -58,22 +55,31 @@ fn apply_h3_cell(lat: &Series, lon: &Series, resolution: u8) -> UInt64Chunked {
     }
 }
 
-pub(super) fn parallel_lat_lon_to_cell(df: DataFrame, col_a: &str, col_b: &str, resolution: u8, name: &str) -> PolarsResult<DataFrame> {
+pub(super) fn parallel_lat_lon_to_cell(
+    df: DataFrame,
+    col_a: &str,
+    col_b: &str,
+    resolution: u8,
+    name: &str,
+) -> PolarsResult<DataFrame> {
     let offsets = split_offsets(df.height(), rayon::current_num_threads());
 
-    let dfs = offsets.par_iter().map(|(offset, len)| {
-        let mut sub_df = df.slice(*offset as i64, *len);
-        let lat_col = sub_df.column(col_a).unwrap();
-        let lon_col = sub_df.column(col_b).unwrap();
-    
-        // compute h3_cells
-        let h3_cell_series = Series::new(name, apply_h3_cell(lat_col, lon_col, resolution));
-    
-        // add h3_cell column
-        sub_df.with_column(h3_cell_series).unwrap();
+    let dfs = offsets
+        .par_iter()
+        .map(|(offset, len)| {
+            let mut sub_df = df.slice(*offset as i64, *len);
+            let lat_col = sub_df.column(col_a).unwrap();
+            let lon_col = sub_df.column(col_b).unwrap();
 
-        Ok(sub_df)
-    }).collect::<PolarsResult<Vec<_>>>()?;
+            // compute h3_cells
+            let h3_cell_series = Series::new(name, apply_h3_cell(lat_col, lon_col, resolution));
+
+            // add h3_cell column
+            sub_df.with_column(h3_cell_series).unwrap();
+
+            Ok(sub_df)
+        })
+        .collect::<PolarsResult<Vec<_>>>()?;
 
     accumulate_dataframes_vertical(dfs)
 }
