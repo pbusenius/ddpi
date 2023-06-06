@@ -1,3 +1,3 @@
-## No Drift Event
+# No Drift Event
 
 ![ais heatmap](../../data/images/drift.png)
